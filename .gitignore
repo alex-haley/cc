@@ -1,3 +1,4 @@
 build/*
 src/.cc
+src/ccdebug.rdbg
 src/hello_sailor.txt

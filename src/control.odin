@@ -15,14 +15,14 @@ fill_hash_map :: proc(version_path: string, hash_map: ^map[string]i64)
     cur_folder, opening_error := os.open(version_path);
     defer os.close(cur_folder);
     if opening_error != os.ERROR_NONE {
-        f.printf("could not open directory for reading, sad");
+        f.printf("could not open directory for reading, sad\n");
         os.exit(1);
     }
     
     fis, reading_error := os.read_dir(cur_folder, -1);
     defer os.file_info_slice_delete(fis);
     if reading_error != os.ERROR_NONE {
-        f.printf("could not read directory, sad");
+        f.printf("could not read directory, sad\n");
         os.exit(1);
     }
     
@@ -41,14 +41,14 @@ write_files :: proc(cur_path, version_path: string, hash_map: map[string]i64)
     cur_folder, opening_error := os.open(cur_path);
     defer os.close(cur_folder);
     if opening_error != os.ERROR_NONE {
-        f.printf("could not open directory for reading, sad");
+        f.printf("could not open directory for reading, sad\n");
         os.exit(1);
     }
     
     fis, reading_error := os.read_dir(cur_folder, -1);
     defer os.file_info_slice_delete(fis);
     if reading_error != os.ERROR_NONE {
-        f.printf("could not read directory, sad");
+        f.printf("could not read directory, sad\n");
         os.exit(1);
     }
     
@@ -89,14 +89,14 @@ create_new_version :: proc(cur_path, version_path: string)
     cur_folder, opening_error := os.open(cur_path);
     defer os.close(cur_folder);
     if opening_error != os.ERROR_NONE {
-        f.printf("could not open directory for reading, sad");
+        f.printf("could not open directory for reading, sad\n");
         os.exit(1);
     }
     
     fis, reading_error := os.read_dir(cur_folder, -1);
     defer os.file_info_slice_delete(fis);
     if reading_error != os.ERROR_NONE {
-        f.printf("could not read directory, sad");
+        f.printf("could not read directory, sad\n");
         os.exit(1);
     }
     
@@ -119,6 +119,12 @@ create_new_version :: proc(cur_path, version_path: string)
     }
 }
 
+show_help :: proc()
+{
+    f.printf("\nv - create new version\n");
+    f.printf("u - update current version (if exists)\n");
+}
+
 main :: proc()
 {
     cur_path := os.get_current_directory();
@@ -128,6 +134,7 @@ main :: proc()
     
     if len(os.args) < 2 {
         f.printf("no arguments!\n");
+        show_help();
         os.exit(1);
     }
     
@@ -162,6 +169,6 @@ main :: proc()
     } else if os.args[1] == "u" {
         update_cur_version(cur_path, version_path);
     } else {
-        f.printf("wrong argument, type 'v' for new version, 'u' for update\n");
+        show_help();
     }
 }
