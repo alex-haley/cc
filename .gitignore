@@ -1,1 +1,3 @@
 build/*
+src/.cc
+src/hello_sailor.txt

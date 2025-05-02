@@ -6,29 +6,37 @@ import   "core:os"
 
 import "core:path/filepath"
 
-// TODO(alex-haley): make proper handle checking,
-// and try to make 'status' function to check wether
-// file was edited or not, so we will save edited files
-// in new version, and if there is no updates, we wouldn't
-// create a new version.
-
-// NOTE(alex-haley): what i was thinking about today
-// i guess we will have two different ways to 'commit'
-// to the repository - update current version, or
-// create new version.
-//
-// when we just doing update of the current version,
-// we add new lines to the files, and delete deleted lines,
-// and write log inside this version about what was changed
-//
-// when we do new version, we just straight up copying
-// the files from the folder, and that's it.
-
 CC_DIR   :: ".cc";
 MANIFEST :: "manifest.log";
 VERSION  :: "version";
 
-copy_files_to_cc :: proc(cur_path, version_path: string)
+fill_hash_map :: proc(version_path: string, hash_map: ^map[string]i64)
+{
+    cur_folder, opening_error := os.open(version_path);
+    defer os.close(cur_folder);
+    if opening_error != os.ERROR_NONE {
+        f.printf("could not open directory for reading, sad");
+        os.exit(1);
+    }
+    
+    fis, reading_error := os.read_dir(cur_folder, -1);
+    defer os.file_info_slice_delete(fis);
+    if reading_error != os.ERROR_NONE {
+        f.printf("could not read directory, sad");
+        os.exit(1);
+    }
+    
+    for item in fis {
+        if item.is_dir {
+            fill_hash_map(item.fullpath, hash_map);
+        } else {
+            latest_write := item.modification_time._nsec;
+            hash_map[item.name] = latest_write;
+        }
+    }
+}
+
+write_files :: proc(cur_path, version_path: string, hash_map: map[string]i64)
 {
     cur_folder, opening_error := os.open(cur_path);
     defer os.close(cur_folder);
@@ -49,13 +57,61 @@ copy_files_to_cc :: proc(cur_path, version_path: string)
             if item.name != CC_DIR {
                 version_inner_dir_path := filepath.join({version_path, item.name});
                 os.make_directory(version_inner_dir_path, 0);
-                copy_files_to_cc(item.fullpath, version_inner_dir_path);
+                write_files(item.fullpath, version_inner_dir_path, hash_map);
+            }
+        } else {
+            latest_write := item.modification_time._nsec;
+            if latest_write != hash_map[item.name] {
+                file_contents, succ := os.read_entire_file(item.fullpath);
+                if !succ {
+                    f.printf("error while reading: %s\n", item.name);
+                    f.printf("skipping...\n");
+                    continue;
+                }
+                where_to_copy := filepath.join({version_path, item.name});
+                os.write_entire_file(where_to_copy, file_contents);
+            }
+        }
+    }
+}
+
+update_cur_version :: proc(cur_path, version_path: string)
+{
+    hash_map := make(map[string]i64);
+    defer delete(hash_map);
+    
+    fill_hash_map(version_path, &hash_map);
+    write_files(cur_path, version_path, hash_map);
+}
+
+create_new_version :: proc(cur_path, version_path: string)
+{
+    cur_folder, opening_error := os.open(cur_path);
+    defer os.close(cur_folder);
+    if opening_error != os.ERROR_NONE {
+        f.printf("could not open directory for reading, sad");
+        os.exit(1);
+    }
+    
+    fis, reading_error := os.read_dir(cur_folder, -1);
+    defer os.file_info_slice_delete(fis);
+    if reading_error != os.ERROR_NONE {
+        f.printf("could not read directory, sad");
+        os.exit(1);
+    }
+    
+    for item in fis {
+        if item.is_dir {
+            if item.name != CC_DIR {
+                version_inner_dir_path := filepath.join({version_path, item.name});
+                os.make_directory(version_inner_dir_path, 0);
+                create_new_version(item.fullpath, version_inner_dir_path);
             }
         } else {
             file_contents, succ := os.read_entire_file(item.fullpath);
             if !succ {
                 f.printf("error while reading: %s\n", item.name);
-                f.printf("this file will not be included in new version!\n");
+                f.printf("skipping...\n");
             }
             where_to_copy := filepath.join({version_path, item.name});
             os.write_entire_file(where_to_copy, file_contents);
@@ -69,6 +125,11 @@ main :: proc()
     cc_dir   := CC_DIR;
     manifest := MANIFEST;
     version  := VERSION;
+    
+    if len(os.args) < 2 {
+        f.printf("no arguments!\n");
+        os.exit(1);
+    }
     
     cc_path := filepath.join({cur_path, cc_dir});
     manifest_path := filepath.join({cc_path, manifest});
@@ -84,13 +145,23 @@ main :: proc()
     if !succ {
         manifest_version = {'1'};
     } else {
-        manifest_version[0] += 1;
+        if os.args[1] == "v" {
+            manifest_version[0] += 1;
+        }
     }
     os.write_entire_file(manifest_path, manifest_version);
     
     version_with_number := s.concatenate({version, string(manifest_version)});
     version_path := filepath.join({cc_path, version_with_number});
-    os.make_directory(version_path, 0);
+    if !os.is_dir(version_path) {
+        os.make_directory(version_path, 0);
+    }
     
-    copy_files_to_cc(cur_path, version_path);
+    if os.args[1] == "v" || !succ {
+        create_new_version(cur_path, version_path);
+    } else if os.args[1] == "u" {
+        update_cur_version(cur_path, version_path);
+    } else {
+        f.printf("wrong argument, type 'v' for new version, 'u' for update\n");
+    }
 }
